@@ -114,7 +114,7 @@
 
         #settings-modal { display: none; position: fixed; z-index: 3000; inset: 0; background: rgba(0,0,0,0.9); overflow-y: auto; padding: 20px; }
         .modal-content { background: var(--panel-bg); margin: auto; padding: 25px; border-radius: 15px; max-width: 1000px; border: 3px solid var(--accent); color: var(--text-dark); }
-        .file-controls { display: flex; justify-content: center; gap: 20px; padding-bottom: 20px; border-bottom: 2px solid var(--accent); margin-bottom: 20px; }
+        .file-controls { display: flex; justify-content: center; gap: 10px; padding-bottom: 20px; border-bottom: 2px solid var(--accent); margin-bottom: 20px; flex-wrap: wrap; }
         .q-card { background: #fff; padding: 15px; margin-bottom: 15px; border-radius: 10px; border-left: 8px solid var(--bg-main); box-shadow: 2px 2px 5px rgba(0,0,0,0.1); }
         .opt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
         .btn { padding: 10px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; text-transform: uppercase; }
@@ -188,8 +188,9 @@
     <div id="settings-modal">
         <div class="modal-content">
             <div class="file-controls">
-                <button class="btn" style="background:#2c3e50; color:white;" onclick="exportData()">💾 SAVE FILE (EXPORT)</button>
-                <button class="btn" style="background:#2c3e50; color:white;" onclick="document.getElementById('import-file').click()">📁 LOAD FILE (IMPORT)</button>
+                <button class="btn" style="background:#2c3e50; color:white;" onclick="exportData()">💾 EXPORT</button>
+                <button class="btn" style="background:#2c3e50; color:white;" onclick="document.getElementById('import-file').click()">📁 IMPORT</button>
+                <button class="btn" style="background:var(--neon-red); color:white;" onclick="clearAllData()">🗑️ CLEAR DATA</button>
                 <input type="file" id="import-file" style="display:none" onchange="importData(this)">
             </div>
             
@@ -227,6 +228,19 @@
             const tx = db.transaction("gameData", "readonly");
             const get = tx.objectStore("gameData").get("current");
             get.onsuccess = () => { if(get.result) rawQuestions = get.result.data; };
+        }
+
+        function clearAllData() {
+            if(confirm("Are you sure you want to clear all questions and images? This cannot be undone.")) {
+                rawQuestions = Array.from({length: 15}, () => ({
+                    text: "", img: "", opts: [{t: "", c: true, img: ""}, {t: "", c: false, img: ""}, {t: "", c: false, img: ""}, {t: "", c: false, img: ""}]
+                }));
+                if(db) {
+                    const tx = db.transaction("gameData", "readwrite");
+                    tx.objectStore("gameData").clear();
+                }
+                openSettings(gameStarted);
+            }
         }
 
         window.addEventListener('paste', async (e) => {
@@ -275,12 +289,9 @@
             window.speechSynthesis.speak(msg);
         }
 
-        // MODIFIED: Added strict boundary constraints to keep movement within the box
         function shuffleOptions(id, isQuick = false) {
             const lane = document.getElementById(`lane-${id}`);
             const targets = lane.querySelectorAll('.ghost-target');
-            
-            // Constrained Quadrants: Left (5-75%), Top (5-65%) to avoid borders and buttons
             const quadrants = [
                 {x: 5, y: 5},   {x: 75, y: 5},
                 {x: 5, y: 65},  {x: 75, y: 65}
@@ -293,12 +304,9 @@
                 } else {
                     g.style.transition = "left 3s linear, top 3s linear";
                 }
-                
                 const pos = quadrants[i % quadrants.length];
-                // Drift reduced to keep targets safely within the visible "box"
                 const driftX = Math.random() * 10;
                 const driftY = Math.random() * 10;
-                
                 g.style.left = (pos.x + driftX) + "%";
                 g.style.top = (pos.y + driftY) + "%";
             });
