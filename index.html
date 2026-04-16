@@ -95,7 +95,7 @@
         }
         .game-settings-btn { background: var(--accent); }
 
-        .team-end-overlay { display: none; position: absolute; inset: 0; background: rgba(0,0,0,0.8); z-index: 900; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        .team-end-overlay { display: none; position: absolute; inset: 0; background: rgba(0,0,0,0.8); z-index: 900; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
         
         @keyframes vibrate {
             0% { transform: translate(0,0); }
@@ -156,8 +156,8 @@
                 </div>
                 <button id="shuf-1" class="shuffle-btn" onclick="shuffleOptions(1, true)">SHUFFLE 🔀</button>
                 <div id="overlay-1" class="team-end-overlay">
-                    <img src="GAME OVER.gif" style="max-width: 80%; margin-bottom: 20px;">
-                    <button class="btn" style="background:var(--bg-main); color:white;" onclick="restartTeam(1)">TRY AGAIN</button>
+                    <div id="overlay-content-1">
+                        </div>
                 </div>
             </div>
             <div id="lane-2" class="game-lane">
@@ -167,8 +167,8 @@
                 </div>
                 <button id="shuf-2" class="shuffle-btn" onclick="shuffleOptions(2, true)">SHUFFLE 🔀</button>
                 <div id="overlay-2" class="team-end-overlay">
-                    <img src="GAME OVER.gif" style="max-width: 80%; margin-bottom: 20px;">
-                    <button class="btn" style="background:var(--bg-main); color:white;" onclick="restartTeam(2)">TRY AGAIN</button>
+                    <div id="overlay-content-2">
+                         </div>
                 </div>
             </div>
         </div>
@@ -366,7 +366,10 @@
                 if(!syncOn) qs.sort(() => Math.random() - 0.5);
                 teamData[id] = { questions: qs, currentIdx: 0, lives: parseInt(document.getElementById('life-val').value), score: 0, active: true, isStunned: false };
                 document.getElementById(`lane-${id}`).style.backgroundImage = `url('${id === 1 ? selBg : (bgs.find(b => b !== selBg) || bgs[1])}')`;
+                document.getElementById(`overlay-${id}`).style.display = 'none';
                 updateHearts(id);
+                const sc = document.getElementById(`score-${id}`);
+                if(sc) sc.innerText = "00";
             });
 
             const shuf1 = document.getElementById('shuf-1');
@@ -412,7 +415,7 @@
             const data = teamData[id];
             const lane = document.getElementById(`lane-${id}`);
             lane.querySelectorAll('.ghost-target').forEach(g => g.remove());
-            if(data.currentIdx >= data.questions.length) { endTeam(id); return; }
+            if(data.currentIdx >= data.questions.length) { endTeam(id, true); return; }
 
             const q = data.questions[data.currentIdx];
             const qBox = document.getElementById(`box-team-${id}`);
@@ -450,21 +453,49 @@
         }
 
         function drag(el, id) {
+            let activeTouchId = null;
+
             const moveHandler = (e) => {
                 if(!teamData[id].active || teamData[id].isStunned || document.getElementById('settings-modal').style.display === 'block') return;
-                const evt = e.touches ? Array.from(e.touches).find(t => t.target === el || el.contains(t.target)) || e.touches[0] : e;
+                
+                let clientX, clientY;
+                if (e.touches) {
+                    // For multi-touch: find the specific touch that started on this element
+                    const touch = Array.from(e.touches).find(t => t.identifier === activeTouchId);
+                    if (!touch) return;
+                    clientX = touch.clientX;
+                    clientY = touch.clientY;
+                } else {
+                    clientX = e.clientX;
+                    clientY = e.clientY;
+                }
+
                 const r = el.parentElement.getBoundingClientRect();
-                el.style.left = (evt.clientX - r.left - 30) + 'px';
-                el.style.top = (evt.clientY - r.top - 30) + 'px';
+                el.style.left = (clientX - r.left - 30) + 'px';
+                el.style.top = (clientY - r.top - 30) + 'px';
                 check(el, id);
                 e.preventDefault();
             };
-            const stopHandler = () => {
-                el.removeEventListener('mousemove', moveHandler);
-                el.removeEventListener('touchmove', moveHandler);
+
+            const startHandler = (e) => {
+                if (e.touches) {
+                    activeTouchId = e.changedTouches[0].identifier;
+                }
+                window.addEventListener('mousemove', moveHandler);
+                window.addEventListener('touchmove', moveHandler, { passive: false });
             };
-            el.addEventListener('mousedown', () => el.addEventListener('mousemove', moveHandler));
-            el.addEventListener('touchstart', (e) => el.addEventListener('touchmove', moveHandler, { passive: false }), { passive: false });
+
+            const stopHandler = (e) => {
+                if (e.touches) {
+                    const touch = Array.from(e.changedTouches).find(t => t.identifier === activeTouchId);
+                    if (!touch) return;
+                }
+                window.removeEventListener('mousemove', moveHandler);
+                window.removeEventListener('touchmove', moveHandler);
+            };
+
+            el.addEventListener('mousedown', startHandler);
+            el.addEventListener('touchstart', startHandler, { passive: false });
             window.addEventListener('mouseup', stopHandler);
             window.addEventListener('touchend', stopHandler);
         }
@@ -492,13 +523,32 @@
                             teamData[id].isStunned = false;
                             p.classList.remove('vibrate');
                         }, 2000);
-                        if(teamData[id].lives <= 0) endTeam(id);
+                        if(teamData[id].lives <= 0) endTeam(id, false);
                     }
                 }
             });
         }
 
-        function endTeam(id) { teamData[id].active = false; document.getElementById(`overlay-${id}`).style.display = 'flex'; }
+        function endTeam(id, isWin) { 
+            teamData[id].active = false; 
+            const overlay = document.getElementById(`overlay-${id}`);
+            const content = document.getElementById(`overlay-content-${id}`);
+            
+            if (isWin) {
+                content.innerHTML = `
+                    <h2 style="color:var(--neon-green); font-family:'Press Start 2P'; font-size:24px;">FINISHED!</h2>
+                    <p style="color:white; font-size:24px;">SCORE: ${teamData[id].score}</p>
+                    <button class="btn" style="background:var(--neon-green); color:black; font-size:20px;" onclick="restartTeam(${id})">RESTART</button>
+                `;
+            } else {
+                content.innerHTML = `
+                    <img src="GAME OVER.gif" style="max-width: 80%; margin-bottom: 20px;">
+                    <p style="color:white; font-size:24px;">FINAL SCORE: ${teamData[id].score}</p>
+                    <button class="btn" style="background:var(--bg-main); color:white; font-size:20px;" onclick="restartTeam(${id})">TRY AGAIN</button>
+                `;
+            }
+            overlay.style.display = 'flex'; 
+        }
         
         function restartTeam(id) {
             const valid = rawQuestions.filter(q => q.text.trim() !== "" || q.img !== "");
@@ -509,7 +559,8 @@
             if(sc) sc.innerText = "00";
             updateHearts(id);
             document.getElementById(`overlay-${id}`).style.display = 'none';
-            spawnPlayer(id); loadQ(id);
+            spawnPlayer(id); 
+            loadQ(id);
         }
 
         function exportData() {
