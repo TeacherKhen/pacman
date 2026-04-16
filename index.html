@@ -54,6 +54,20 @@
             cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px;
         }
 
+        /* NEXT BUTTON CENTERED IN LANE */
+        .next-btn {
+            position: absolute; 
+            top: 50%; left: 50%; 
+            transform: translate(-50%, -50%);
+            background: var(--neon-green);
+            border: 4px solid #000; border-radius: 12px; 
+            padding: 15px 30px;
+            cursor: pointer; font-weight: bold; font-size: 24px; 
+            display: none; z-index: 2000;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            font-family: 'Press Start 2P', cursive;
+        }
+
         #game-boundary { position: absolute; top: 160px; left: 0; width: 100%; height: calc(100% - 160px); display: flex; }
         .game-lane { position: relative; height: 100%; flex: 1; background-size: cover; background-position: center; border-right: 8px solid var(--accent); }
 
@@ -72,8 +86,6 @@
             position: static; transform: none; padding: 6px 20px; border-radius: 20px;
             background: #e67e22; color: #fff; border: 2px solid #000; box-shadow: none;
         }
-        .shuffle-btn:active { transform: translateX(-50%) translateY(2px); box-shadow: none; }
-        .shuffle-btn.aligned:active { transform: translateY(2px); }
 
         #bottom-ui {
             position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
@@ -154,10 +166,10 @@
                     <div id="tag-1" class="team-tag">TEAM A</div>
                     <div id="hp-hearts-1" class="lane-hp"></div>
                 </div>
+                <button id="next-1" class="next-btn" onclick="goToNext(1)">NEXT ➡️</button>
                 <button id="shuf-1" class="shuffle-btn" onclick="shuffleOptions(1, true)">SHUFFLE 🔀</button>
                 <div id="overlay-1" class="team-end-overlay">
-                    <div id="overlay-content-1">
-                        </div>
+                    <div id="overlay-content-1"></div>
                 </div>
             </div>
             <div id="lane-2" class="game-lane">
@@ -165,10 +177,10 @@
                     <div id="tag-2" class="team-tag">TEAM B</div>
                     <div id="hp-hearts-2" class="lane-hp"></div>
                 </div>
+                <button id="next-2" class="next-btn" onclick="goToNext(2)">NEXT ➡️</button>
                 <button id="shuf-2" class="shuffle-btn" onclick="shuffleOptions(2, true)">SHUFFLE 🔀</button>
                 <div id="overlay-2" class="team-end-overlay">
-                    <div id="overlay-content-2">
-                         </div>
+                    <div id="overlay-content-2"></div>
                 </div>
             </div>
         </div>
@@ -294,7 +306,7 @@
             const targets = lane.querySelectorAll('.ghost-target');
             const quadrants = [
                 {x: 5, y: 5},   {x: 75, y: 5},
-                {x: 5, y: 65},  {x: 75, y: 65}
+                {x: 5, y: 55},  {x: 75, y: 55}
             ].sort(() => Math.random() - 0.5);
 
             targets.forEach((g, i) => {
@@ -317,7 +329,7 @@
             moveInterval = setInterval(() => {
                 if(document.getElementById('settings-modal').style.display === 'block') return;
                 [1, 2].forEach(id => {
-                    if(teamData[id] && teamData[id].active) shuffleOptions(id);
+                    if(teamData[id] && teamData[id].active && !teamData[id].waitingForNext) shuffleOptions(id);
                 });
             }, 3000);
         }
@@ -364,12 +376,15 @@
             [1, 2].forEach(id => {
                 let qs = JSON.parse(JSON.stringify(valid));
                 if(!syncOn) qs.sort(() => Math.random() - 0.5);
-                teamData[id] = { questions: qs, currentIdx: 0, lives: parseInt(document.getElementById('life-val').value), score: 0, active: true, isStunned: false };
+                teamData[id] = { questions: qs, currentIdx: 0, lives: parseInt(document.getElementById('life-val').value), score: 0, active: true, isStunned: false, waitingForNext: false };
                 document.getElementById(`lane-${id}`).style.backgroundImage = `url('${id === 1 ? selBg : (bgs.find(b => b !== selBg) || bgs[1])}')`;
                 document.getElementById(`overlay-${id}`).style.display = 'none';
+                document.getElementById(`next-${id}`).style.display = 'none';
                 updateHearts(id);
                 const sc = document.getElementById(`score-${id}`);
                 if(sc) sc.innerText = "00";
+                spawnPlayer(id);
+                loadQ(id);
             });
 
             const shuf1 = document.getElementById('shuf-1');
@@ -390,8 +405,6 @@
             closeSettings();
             document.getElementById('intro-screen').style.display = 'none';
             document.getElementById('game-screen').style.display = 'flex';
-            spawnPlayer(1); if(mode === 2) spawnPlayer(2);
-            loadQ(1); if(mode === 2) loadQ(2);
             startMovement();
         }
 
@@ -405,23 +418,30 @@
             const lane = document.getElementById(`lane-${id}`);
             lane.querySelectorAll('.pacman').forEach(p => p.remove());
             const p = document.createElement('div'); p.className = 'pacman'; p.id = `pac-${id}`;
-            p.style.left = '45%'; p.style.top = '70%';
+            resetPacmanPosition(p);
             if(id === 2) p.style.filter = 'hue-rotate(160deg)';
             lane.appendChild(p);
             drag(p, id);
+        }
+
+        function resetPacmanPosition(p) {
+            p.style.left = '45%'; p.style.top = '75%';
         }
 
         function loadQ(id) {
             const data = teamData[id];
             const lane = document.getElementById(`lane-${id}`);
             lane.querySelectorAll('.ghost-target').forEach(g => g.remove());
+            document.getElementById(`next-${id}`).style.display = 'none';
+            data.waitingForNext = false;
+
             if(data.currentIdx >= data.questions.length) { endTeam(id, true); return; }
 
             const q = data.questions[data.currentIdx];
-            const qBox = document.getElementById(`box-team-${id}`);
             const qImgCont = document.getElementById(`q-img-${id}`);
             const qContent = document.getElementById(`q-cont-${id}`);
             const qText = document.getElementById(`q-text-${id}`);
+            const qBox = document.getElementById(`box-team-${id}`);
 
             qText.innerText = q.text;
             qImgCont.innerHTML = q.img ? `<img src="${q.img}" class="q-img-game">` : '';
@@ -452,15 +472,21 @@
             shuffleOptions(id);
         }
 
+        function goToNext(id) {
+            const p = document.getElementById(`pac-${id}`);
+            if(p) resetPacmanPosition(p);
+            teamData[id].currentIdx++;
+            loadQ(id);
+        }
+
         function drag(el, id) {
             let activeTouchId = null;
 
             const moveHandler = (e) => {
-                if(!teamData[id].active || teamData[id].isStunned || document.getElementById('settings-modal').style.display === 'block') return;
+                if(!teamData[id].active || teamData[id].isStunned || teamData[id].waitingForNext || document.getElementById('settings-modal').style.display === 'block') return;
                 
                 let clientX, clientY;
                 if (e.touches) {
-                    // For multi-touch: find the specific touch that started on this element
                     const touch = Array.from(e.touches).find(t => t.identifier === activeTouchId);
                     if (!touch) return;
                     clientX = touch.clientX;
@@ -478,18 +504,12 @@
             };
 
             const startHandler = (e) => {
-                if (e.touches) {
-                    activeTouchId = e.changedTouches[0].identifier;
-                }
+                if (e.touches) activeTouchId = e.changedTouches[0].identifier;
                 window.addEventListener('mousemove', moveHandler);
                 window.addEventListener('touchmove', moveHandler, { passive: false });
             };
 
             const stopHandler = (e) => {
-                if (e.touches) {
-                    const touch = Array.from(e.changedTouches).find(t => t.identifier === activeTouchId);
-                    if (!touch) return;
-                }
                 window.removeEventListener('mousemove', moveHandler);
                 window.removeEventListener('touchmove', moveHandler);
             };
@@ -502,16 +522,31 @@
 
         function check(p, id) {
             const pR = p.getBoundingClientRect();
+            const pCenter = {
+                x: pR.left + pR.width/2,
+                y: pR.top + pR.height/2
+            };
+
             p.parentElement.querySelectorAll('.ghost-target').forEach(g => {
                 const gR = g.getBoundingClientRect();
-                if(!(pR.right < gR.left || pR.left > gR.right || pR.bottom < gR.top || pR.top > gR.bottom)) {
+                const isTouching = (
+                    pCenter.x > gR.left + 20 && 
+                    pCenter.x < gR.right - 20 && 
+                    pCenter.y > gR.top + 20 && 
+                    pCenter.y < gR.bottom - 20
+                );
+
+                if(isTouching) {
                     if(g.dataset.c === "true") {
                         document.getElementById('sfx-correct').play();
                         teamData[id].score++;
                         const sc = document.getElementById(`score-${id}`);
                         if(sc) sc.innerText = teamData[id].score.toString().padStart(2, '0');
-                        teamData[id].currentIdx++;
-                        loadQ(id);
+                        
+                        // Action for correct answer
+                        g.remove();
+                        teamData[id].waitingForNext = true;
+                        document.getElementById(`next-${id}`).style.display = 'block';
                     } else {
                         document.getElementById('sfx-wrong').play();
                         teamData[id].lives--;
@@ -554,7 +589,7 @@
             const valid = rawQuestions.filter(q => q.text.trim() !== "" || q.img !== "");
             let qs = JSON.parse(JSON.stringify(valid));
             if(!syncOn) qs.sort(() => Math.random() - 0.5);
-            teamData[id] = { questions: qs, currentIdx: 0, lives: parseInt(document.getElementById('life-val').value), score: 0, active: true, isStunned: false };
+            teamData[id] = { questions: qs, currentIdx: 0, lives: parseInt(document.getElementById('life-val').value), score: 0, active: true, isStunned: false, waitingForNext: false };
             const sc = document.getElementById(`score-${id}`);
             if(sc) sc.innerText = "00";
             updateHearts(id);
